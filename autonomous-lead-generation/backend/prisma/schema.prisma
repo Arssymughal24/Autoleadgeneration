@@ -1,0 +1,411 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Lead {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  firstName      String
+  lastName       String
+  company        String
+  industry       String?
+  jobTitle       String?
+  phone          String?
+  website        String?
+  linkedinUrl    String?
+  score          Int        @default(0)
+  customScores   Json?
+  tags           String[]
+  source         LeadSource
+  status         LeadStatus @default(NEW)
+  enrichedData   Json?
+  salesforceId   String?    @unique
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  
+  campaigns      CampaignExecution[]
+  activities     Activity[]
+  formSubmission FormSubmission?
+  scoringResults ScoringResult[]
+  abTestResults  AbTestResult[]
+  
+  @@map("leads")
+  @@index([email])
+  @@index([company])
+  @@index([score])
+  @@index([status])
+  @@index([createdAt])
+  @@index([source])
+}
+
+model FormSubmission {
+  id         String   @id @default(cuid())
+  leadId     String   @unique
+  lead       Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  formData   Json
+  ipAddress  String?
+  userAgent  String?
+  referrer   String?
+  utmSource  String?
+  utmMedium  String?
+  utmCampaign String?
+  createdAt  DateTime @default(now())
+  
+  @@map("form_submissions")
+}
+
+model Campaign {
+  id          String              @id @default(cuid())
+  name        String
+  type        CampaignType
+  trigger     Json
+  template    Json
+  isActive    Boolean             @default(true)
+  performance Json?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  
+  executions  CampaignExecution[]
+  analytics   CampaignAnalytics?
+  abTests     AbTest[]
+  
+  @@map("campaigns")
+}
+
+model CampaignExecution {
+  id         String        @id @default(cuid())
+  campaignId String
+  campaign   Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  leadId     String
+  lead       Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  status     ExecutionStatus @default(PENDING)
+  sentAt     DateTime?
+  openedAt   DateTime?
+  clickedAt  DateTime?
+  repliedAt  DateTime?
+  convertedAt DateTime?
+  revenue    Float?
+  metadata   Json?
+  createdAt  DateTime      @default(now())
+  
+  emailEvents EmailEvent[]
+  
+  @@map("campaign_executions")
+  @@unique([campaignId, leadId])
+}
+
+model Activity {
+  id          String       @id @default(cuid())
+  leadId      String
+  lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type        ActivityType
+  description String
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+  
+  @@map("activities")
+  @@index([leadId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model IntegrationLog {
+  id          String      @id @default(cuid())
+  service     String
+  operation   String
+  status      LogStatus
+  request     Json?
+  response    Json?
+  error       String?
+  duration    Int?
+  createdAt   DateTime    @default(now())
+  
+  @@map("integration_logs")
+  @@index([service])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+  
+  @@map("system_config")
+}
+
+model CampaignAnalytics {
+  id                String   @id @default(cuid())
+  campaignId        String   @unique
+  campaign          Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  totalSent         Int      @default(0)
+  totalDelivered    Int      @default(0)
+  totalOpened       Int      @default(0)
+  totalClicked      Int      @default(0)
+  totalReplied      Int      @default(0)
+  totalBounced      Int      @default(0)
+  totalUnsubscribed Int      @default(0)
+  totalConverted    Int      @default(0)
+  
+  deliveryRate      Float    @default(0)
+  openRate          Float    @default(0)
+  clickRate         Float    @default(0)
+  replyRate         Float    @default(0)
+  bounceRate        Float    @default(0)
+  unsubscribeRate   Float    @default(0)
+  conversionRate    Float    @default(0)
+  
+  totalRevenue      Float    @default(0)
+  averageRevenuePerLead Float @default(0)
+  
+  lastCalculated    DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("campaign_analytics")
+}
+
+model EmailEvent {
+  id            String   @id @default(cuid())
+  executionId   String
+  execution     CampaignExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  eventType     EmailEventType
+  timestamp     DateTime @default(now())
+  metadata      Json?
+  
+  @@map("email_events")
+  @@index([executionId])
+  @@index([eventType])
+  @@index([timestamp])
+}
+
+model AbTest {
+  id            String         @id @default(cuid())
+  name          String
+  description   String?
+  campaignId    String?
+  campaign      Campaign?      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  status        AbTestStatus   @default(DRAFT)
+  
+  testType      AbTestType
+  trafficSplit  Json
+  startDate     DateTime?
+  endDate       DateTime?
+  
+  confidenceLevel Float       @default(95.0)
+  minSampleSize   Int         @default(100)
+  
+  winningVariant  String?
+  significance    Float?
+  
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  variants      AbTestVariant[]
+  results       AbTestResult[]
+  
+  @@map("ab_tests")
+}
+
+model AbTestVariant {
+  id          String   @id @default(cuid())
+  testId      String
+  test        AbTest   @relation(fields: [testId], references: [id], onDelete: Cascade)
+  name        String
+  content     Json
+  trafficPercent Float
+  
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  conversions Int      @default(0)
+  revenue     Float    @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  results     AbTestResult[]
+  
+  @@map("ab_test_variants")
+  @@unique([testId, name])
+}
+
+model AbTestResult {
+  id            String        @id @default(cuid())
+  testId        String
+  test          AbTest        @relation(fields: [testId], references: [id], onDelete: Cascade)
+  variantId     String
+  variant       AbTestVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  leadId        String
+  lead          Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  event         AbTestEvent
+  value         Float?
+  timestamp     DateTime      @default(now())
+  metadata      Json?
+  
+  @@map("ab_test_results")
+  @@index([testId])
+  @@index([variantId])
+  @@index([leadId])
+  @@index([event])
+}
+
+model ScoringAlgorithm {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  description     String?
+  version         String   @default("1.0")
+  isActive        Boolean  @default(true)
+  
+  algorithm       Json
+  weights         Json
+  thresholds      Json
+  
+  accuracy        Float?
+  precision       Float?
+  recall          Float?
+  f1Score         Float?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  scoringResults  ScoringResult[]
+  
+  @@map("scoring_algorithms")
+}
+
+model ScoringResult {
+  id            String           @id @default(cuid())
+  leadId        String
+  lead          Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  algorithmId   String
+  algorithm     ScoringAlgorithm @relation(fields: [algorithmId], references: [id], onDelete: Cascade)
+  
+  score         Float
+  confidence    Float?
+  features      Json?
+  explanation   Json?
+  
+  createdAt     DateTime         @default(now())
+  
+  @@map("scoring_results")
+  @@unique([leadId, algorithmId])
+  @@index([score])
+  @@index([createdAt])
+}
+
+enum LeadSource {
+  UPLEAD
+  ZOOMINFO
+  SALES_NAVIGATOR
+  MANUAL
+  FORM_SUBMISSION
+  API_IMPORT
+  LINKEDIN
+  APOLLO
+}
+
+enum LeadStatus {
+  NEW
+  ENRICHING
+  PROCESSING
+  SCORED
+  IN_CRM
+  CAMPAIGN_ACTIVE
+  QUALIFIED
+  CONVERTED
+  UNQUALIFIED
+  BOUNCED
+}
+
+enum CampaignType {
+  EMAIL
+  LINKEDIN_AD
+  GOOGLE_AD
+  FACEBOOK_AD
+  CONTENT_DELIVERY
+  NURTURE_SEQUENCE
+  RETARGETING
+}
+
+enum ExecutionStatus {
+  PENDING
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  REPLIED
+  FAILED
+  BOUNCED
+  CONVERTED
+}
+
+enum ActivityType {
+  LEAD_CREATED
+  ENRICHMENT_STARTED
+  ENRICHMENT_COMPLETED
+  AI_SCORING_STARTED
+  AI_SCORED
+  CRM_SYNC_STARTED
+  CRM_SYNCED
+  CAMPAIGN_TRIGGERED
+  EMAIL_SENT
+  FORM_SUBMITTED
+  FOLLOW_UP_GENERATED
+  STATUS_CHANGED
+  ERROR_OCCURRED
+  AB_TEST_ASSIGNED
+  CUSTOM_SCORE_CALCULATED
+  REVENUE_TRACKED
+}
+
+enum LogStatus {
+  SUCCESS
+  ERROR
+  TIMEOUT
+  RATE_LIMITED
+}
+
+enum EmailEventType {
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  REPLIED
+  BOUNCED
+  UNSUBSCRIBED
+  MARKED_SPAM
+  CONVERTED
+}
+
+enum AbTestStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum AbTestType {
+  EMAIL_SUBJECT
+  EMAIL_CONTENT
+  EMAIL_TEMPLATE
+  AD_COPY
+  LANDING_PAGE
+  CALL_TO_ACTION
+  SEND_TIME
+}
+
+enum AbTestEvent {
+  ASSIGNED
+  IMPRESSION
+  CLICK
+  CONVERSION
+  REVENUE
+}

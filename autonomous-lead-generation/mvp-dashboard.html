@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script type="text/javascript">
+  // This is a CodeSandbox injection script that's used to
+  // add navigation and inspector functionality to the preview
+  (function () {
+    // 1) Get the <script> tag that's currently running:
+    var me = document.currentScript;
+
+    // 2) Create the blocking‐style <script> to load:
+    var script = document.createElement("script");
+    script.src = "https://codesandbox.io/p/preview-protocol.js";
+
+    // By default a dynamically‐inserted <script> is async=true.
+    // Turn async off to make it behave like a normal blocking <script>:
+    script.async = false;
+    // (Do NOT set defer.)
+
+    // 3) Insert it immediately after the current <script>:
+    me.parentNode.insertBefore(script, me);
+  })();
+
+  const isIFramePreview = window.top !== window.self;
+
+  // Only run this script in editor context
+  if (isIFramePreview) {
+    // This script is used to enable Chrome DevTools functionality
+    (function () {
+      var script = document.createElement("script");
+      script.src =
+        "https://codesandbox.io/p/chrome-devtool/protocol/index.js";
+
+      script.onload = () => {
+        const devtoolProtocol = window.chobitsu;
+        if (devtoolProtocol) {
+          window.addEventListener("message", (event) => {
+            const { type, data } = event.data;
+
+            if (type === "FROM_DEVTOOL") {
+              devtoolProtocol.sendRawMessage(data);
+            }
+          });
+
+          devtoolProtocol.setOnMessage((data) => {
+            if (data.includes('"id":"tmp')) {
+              return;
+            }
+
+            window.parent.postMessage({ type: "TO_DEVTOOL", data }, "*");
+          });
+
+          devtoolProtocol.sendRawMessage(
+            `{"id":5,"method":"Runtime.enable","params":{}}`
+          );
+        }        
+      }
+
+      (document.head || document.documentElement).prepend(script);
+    })();
+  }
+
+  if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined") {
+    let nextID = 0;
+    let hook = (__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
+      renderers: new Map(),
+      supportsFiber: true,
+      inject: (renderer) => {
+        const id = nextID++;
+        hook.renderers.set(id, renderer);
+        return id;
+      },
+      onScheduleFiberRoot() {},
+      onCommitFiberRoot() {},
+      onCommitFiberUnmount() {},
+    });
+  }
+
+  document.currentScript.remove();
+</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous Lead Generation Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .card { @apply bg-white rounded-lg shadow-md p-6 mb-6; }
+        .metric-card { @apply bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-6; }
+        .metric-card.green { @apply from-green-500 to-teal-600; }
+        .metric-card.orange { @apply from-orange-500 to-red-600; }
+        .metric-card.purple { @apply from-purple-500 to-pink-600; }
+        .btn { @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200; }
+        .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
+        .btn-secondary { @apply bg-gray-200 text-gray-800 hover:bg-gray-300; }
+        .btn-success { @apply bg-green-600 text-white hover:bg-green-700; }
+        .btn-danger { @apply bg-red-600 text-white hover:bg-red-700; }
+        .tab-active { @apply bg-blue-600 text-white; }
+        .tab-inactive { @apply bg-gray-200 text-gray-700 hover:bg-gray-300; }
+        .status-badge { @apply px-2 py-1 rounded-full text-xs font-medium; }
+        .status-new { @apply bg-blue-100 text-blue-800; }
+        .status-qualified { @apply bg-green-100 text-green-800; }
+        .status-converted { @apply bg-purple-100 text-purple-800; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <h1 class="text-2xl font-bold text-gray-800">
+                        <i class="fas fa-robot text-blue-600 mr-2"></i>
+                        Autonomous Lead Gen
+                    </h1>
+                    <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-sm font-medium">
+                        <i class="fas fa-circle text-green-500 mr-1"></i>
+                        System Active
+                    </span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button class="btn btn-primary" onclick="refreshDashboard()">
+                        <i class="fas fa-sync mr-2"></i>Refresh
+                    </button>
+                    <button class="btn btn-secondary" onclick="toggleSettings()">
+                        <i class="fas fa-cog mr-2"></i>Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="bg-white border-b">
+        <div class="container mx-auto px-6">
+            <div class="flex space-x-1">
+                <button class="tab-button px-6 py-3 tab-active" data-tab="dashboard" onclick="switchTab('dashboard')">
+                    <i class="fas fa-chart-line mr-2"></i>Dashboard
+                </button>
+                <button class="tab-button px-6 py-3 tab-inactive" data-tab="leads" onclick="switchTab('leads')">
+                    <i class="fas fa-users mr-2"></i>Leads
+                </button>
+                <button class="tab-button px-6 py-3 tab-inactive" data-tab="campaigns" onclick="switchTab('campaigns')">
+                    <i class="fas fa-bullhorn mr-2"></i>Campaigns
+                </button>
+                <button class="tab-button px-6 py-3 tab-inactive" data-tab="analytics" onclick="switchTab('analytics')">
+                    <i class="fas fa-analytics mr-2"></i>Analytics
+                </button>
+                <button class="tab-button px-6 py-3 tab-inactive" data-tab="ab-testing" onclick="switchTab('ab-testing')">
+                    <i class="fas fa-flask mr-2"></i>A/B Testing
+                </button>
+                <button class="tab-button px-6 py-3 tab-inactive" data-tab="scoring" onclick="switchTab('scoring')">
+                    <i class="fas fa-brain mr-2"></i>AI Scoring
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-6 py-8">
+        <!-- Dashboard Tab -->
+        <div id="dashboard-tab" class="tab-content">
+            <!-- Key Metrics -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="metric-card">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-blue-100 text-sm">Total Leads</p>
+                            <p class="text-3xl font-bold" id="total-leads">1,247</p>
+                            <p class="text-blue-100 text-sm">+23% this month</p>
+                        </div>
+                        <i class="fas fa-users text-4xl text-blue-200"></i>
+                    </div>
+                </div>
+                
+                <div class="metric-card green">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-green-100 text-sm">Conversions</p>
+                            <p class="text-3xl font-bold" id="total-conversions">89</p>
+                            <p class="text-green-100 text-sm">7.1% conversion rate</p>
+                        </div>
+                        <i class="fas fa-chart-line text-4xl text-green-200"></i>
+                    </div>
+                </div>
+                
+                <div class="metric-card orange">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-orange-100 text-sm">Revenue</p>
+                            <p class="text-3xl font-bold" id="total-revenue">$45,230</p>
+                            <p class="text-orange-100 text-sm">$508 avg/lead</p>
+                        </div>
+                        <i class="fas fa-dollar-sign text-4xl text-orange-200"></i>
+                    </div>
+                </div>
+                
+                <div class="metric-card purple">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-purple-100 text-sm">AI Score Avg</p>
+                            <p class="text-3xl font-bold" id="avg-score">73</p>
+                            <p class="text-purple-100 text-sm">+5 points improved</p>
+                        </div>
+                        <i class="fas fa-brain text-4xl text-purple-200"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Lead Generation Trends</h3>
+                    <canvas id="leads-chart"></canvas>
+                </div>
+                
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Campaign Performance</h3>
+                    <canvas id="campaigns-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Recent Leads</h3>
+                    <div class="space-y-3" id="recent-leads">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">System Activity</h3>
+                    <div class="space-y-3" id="system-activity">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Leads Tab -->
+        <div id="leads-tab" class="tab-content hidden">
+            <div class="card">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold">Lead Management</h2>
+                    <div class="flex space-x-2">
+                        <button class="btn btn-secondary" onclick="exportLeads()">
+                            <i class="fas fa-download mr-2"></i>Export
+                        </button>
+                        <button class="btn btn-primary" onclick="importLeads()">
+                            <i class="fas fa-upload mr-2"></i>Import
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Filters -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <input type="text" placeholder="Search leads..." class="border rounded-lg px-3 py-2" id="lead-search">
+                    <select class="border rounded-lg px-3 py-2" id="status-filter">
+                        <option value="">All Statuses</option>
+                        <option value="NEW">New</option>
+                        <option value="SCORED">Scored</option>
+                        <option value="QUALIFIED">Qualified</option>
+                        <option value="CONVERTED">Converted</option>
+                    </select>
+                    <select class="border rounded-lg px-3 py-2" id="source-filter">
+                        <option value="">All Sources</option>
+                        <option value="UPLEAD">UpLead</option>
+                        <option value="ZOOMINFO">ZoomInfo</option>
+                        <option value="FORM_SUBMISSION">Form</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="filterLeads()">Filter</button>
+                </div>
+                
+                <!-- Leads Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Name</th>
+                                <th class="px-4 py-2 text-left">Company</th>
+                                <th class="px-4 py-2 text-left">Score</th>
+                                <th class="px-4 py-2 text-left">Status</th>
+                                <th class="px-4 py-2 text-left">Source</th>
+                                <th class="px-4 py-2 text-left">Created</th>
+                                <th class="px-4 py-2 text-left">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leads-table-body">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Campaigns Tab -->
+        <div id="campaigns-tab" class="tab-content hidden">
+            <div class="card">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold">Campaign Management</h2>
+                    <button class="btn btn-primary" onclick="createCampaign()">
+                        <i class="fas fa-plus mr-2"></i>New Campaign
+                    </button>
+                </div>
+                
+                <!-- Campaign Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="campaigns-grid">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div id="analytics-tab" class="tab-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Email Performance</h3>
+                    <canvas id="email-performance-chart"></canvas>
+                </div>
+                
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Lead Sources</h3>
+                    <canvas id="lead-sources-chart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3 class="text-lg font-semibold mb-4">Campaign Comparison</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Campaign</th>
+                                <th class="px-4 py-2 text-left">Sent</th>
+                                <th class="px-4 py-2 text-left">Open Rate</th>
+                                <th class="px-4 py-2 text-left">Click Rate</th>
+                                <th class="px-4 py-2 text-left">Conversion Rate</th>
+                                <th class="px-4 py-2 text-left">Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody id="campaign-comparison-table">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- A/B Testing Tab -->
+        <div id="ab-testing-tab" class="tab-content hidden">
+            <div class="card">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold">A/B Testing</h2>
+                    <button class="btn btn-primary" onclick="createAbTest()">
+                        <i class="fas fa-plus mr-2"></i>New Test
+                    </button>
+                </div>
+                
+                <!-- A/B Tests Grid -->
+                <div class="space-y-6" id="ab-tests-grid">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Scoring Tab -->
+        <div id="scoring-tab" class="tab-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Scoring Algorithms</h3>
+                    <div class="space-y-3" id="scoring-algorithms">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                    <button class="btn btn-primary mt-4" onclick="createScoringAlgorithm()">
+                        <i class="fas fa-plus mr-2"></i>New Algorithm
+                    </button>
+                </div>
+                
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Score Distribution</h3>
+                    <canvas id="score-distribution-chart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3 class="text-lg font-semibold mb-4">Bulk Score Leads</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <select class="border rounded-lg px-3 py-2" id="bulk-algorithm-select">
+                        <option value="">Select Algorithm</option>
+                    </select>
+                    <input type="file" accept=".csv" class="border rounded-lg px-3 py-2" id="bulk-leads-file">
+                    <button class="btn btn-primary" onclick="bulkScoreLeads()">
+                        <i class="fas fa-brain mr-2"></i>Score All
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals and Scripts -->
+    <script>
+        // Global variables
+        const API_BASE = '/api';
+        let currentTab = 'dashboard';
+        let dashboardData = {};
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboard();
+            initializeCharts();
+            setInterval(autoRefresh, 30000); // Refresh every 30 seconds
+        });
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.add('hidden');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.remove('hidden');
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('tab-active');
+                btn.classList.add('tab-inactive');
+            });
+            
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('tab-active');
+            document.querySelector(`[data-tab="${tabName}"]`).classList.remove('tab-inactive');
+            
+            currentTab = tabName;
+            
+            // Load tab-specific data
+            switch(tabName) {
+                case 'leads':
+                    loadLeads();
+                    break;
+                case 'campaigns':
+                    loadCampaigns();
+                    break;
+                case 'analytics':
+                    loadAnalytics();
+                    break;
+                case 'ab-testing':
+                    loadAbTests();
+                    break;
+                case 'scoring':
+                    loadScoringAlgorithms();
+                    break;
+            }
+        }
+
+        // Dashboard functions
+        async function loadDashboard() {
+            try {
+                showLoading();
+                
+                const response = await fetch(`${API_BASE}/analytics/dashboard`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    dashboardData = data.data;
+                    updateDashboardMetrics();
+                    updateRecentActivity();
+                    updateCharts();
+                }
+                
+                hideLoading();
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                showError('Failed to load dashboard data');
+            }
+        }
+
+        function updateDashboardMetrics() {
+            const overview = dashboardData.overview;
+            
+            document.getElementById('total-leads').textContent = overview.totalLeads.toLocaleString();
+            document.getElementById('total-conversions').textContent = overview.activeLeads.toLocaleString();
+            document.getElementById('total-revenue').textContent = '$' + overview.totalRevenue.toLocaleString();
+            document.getElementById('avg-score').textContent = Math.round(overview.averageScore);
+        }
+
+        function updateRecentActivity() {
+            // Mock recent leads data
+            const recentLeadsHtml = `
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">JD</div>
+                        <div>
+                            <p class="font-medium">John Doe</p>
+                            <p class="text-sm text-gray-600">Acme Corp</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="status-badge status-qualified">Qualified</span>
+                        <p class="text-xs text-gray-500 mt-1">2 min ago</p>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm font-medium">JS</div>
+                        <div>
+                            <p class="font-medium">Jane Smith</p>
+                            <p class="text-sm text-gray-600">TechStart Inc</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="status-badge status-converted">Converted</span>
+                        <p class="text-xs text-gray-500 mt-1">5 min ago</p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('recent-leads').innerHTML = recentLeadsHtml;
+            
+            // Mock system activity
+            const systemActivityHtml = `
+                <div class="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
+                    <i class="fas fa-check-circle text-green-500"></i>
+                    <div>
+                        <p class="font-medium">Campaign "Q4 Outreach" completed</p>
+                        <p class="text-sm text-gray-600">89% delivery rate achieved</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+                    <i class="fas fa-brain text-blue-500"></i>
+                    <div>
+                        <p class="font-medium">AI scored 23 new leads</p>
+                        <p class="text-sm text-gray-600">Average score: 74/100</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
+                    <i class="fas fa-flask text-purple-500"></i>
+                    <div>
+                        <p class="font-medium">A/B test "Subject Line Test" concluded</p>
+                        <p class="text-sm text-gray-600">Variant B won with 12% improvement</p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('system-activity').innerHTML = systemActivityHtml;
+        }
+
+        // Chart initialization
+        function initializeCharts() {
+            initializeLeadsChart();
+            initializeCampaignsChart();
+        }
+
+        function initializeLeadsChart() {
+            const ctx = document.getElementById('leads-chart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    datasets: [{
+                        label: 'New Leads',
+                        data: [65, 89, 123, 145, 178, 201],
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function initializeCampaignsChart() {
+            const ctx = document.getElementById('campaigns-chart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Email', 'LinkedIn', 'Google Ads'],
+                    datasets: [{
+                        data: [45, 30, 25],
+                        backgroundColor: [
+                            'rgb(59, 130, 246)',
+                            'rgb(16, 185, 129)',
+                            'rgb(245, 158, 11)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Utility functions
+        function showLoading() {
+            // Implementation for loading indicator
+        }
+
+        function hideLoading() {
+            // Implementation for hiding loading indicator
+        }
+
+        function showError(message) {
+            // Implementation for error display
+            console.error(message);
+        }
+
+        function refreshDashboard() {
+            loadDashboard();
+        }
+
+        function autoRefresh() {
+            if (currentTab === 'dashboard') {
+                loadDashboard();
+            }
+        }
+
+        // Placeholder functions for other features
+        function loadLeads() { console.log('Loading leads...'); }
+        function loadCampaigns() { console.log('Loading campaigns...'); }
+        function loadAnalytics() { console.log('Loading analytics...'); }
+        function loadAbTests() { console.log('Loading A/B tests...'); }
+        function loadScoringAlgorithms() { console.log('Loading scoring algorithms...'); }
+        function updateCharts() { console.log('Updating charts...'); }
+        function exportLeads() { console.log('Exporting leads...'); }
+        function importLeads() { console.log('Importing leads...'); }
+        function filterLeads() { console.log('Filtering leads...'); }
+        function createCampaign() { console.log('Creating campaign...'); }
+        function createAbTest() { console.log('Creating A/B test...'); }
+        function createScoringAlgorithm() { console.log('Creating scoring algorithm...'); }
+        function bulkScoreLeads() { console.log('Bulk scoring leads...'); }
+        function toggleSettings() { console.log('Toggle settings...'); }
+    </script>
+</body>
+</html>
